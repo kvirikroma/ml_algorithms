@@ -1,8 +1,8 @@
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Optional
 
 
 class SampleItem:
-    def __init__(self, values: Tuple, class_name: str):
+    def __init__(self, values: Tuple, class_name: Optional[str]):
         self.values = values
         self.class_name = class_name
 
@@ -27,18 +27,18 @@ def blue(inp: str) -> str:
     return "\033[94m" + inp + "\033[0m"
 
 
-def calculate_euclidean_distance(point1: Tuple[float], point2: Tuple[float]) -> float:
+def euclidean_distance(point1: Tuple[float], point2: Tuple[float]) -> float:
     result = 0
     for coord in range(min(len(point1), len(point2))):
         result += (point1[coord] - point2[coord])**2
     return result ** 0.5
 
 
-def calculate_chebyshev_distance(point1: Tuple[float], point2: Tuple[float]) -> float:
+def chebyshev_distance(point1: Tuple[float], point2: Tuple[float]) -> float:
     return max(abs(point1[coord] - point2[coord]) for coord in range(min(len(point1), len(point2))))
 
 
-def calculate_manhattan_distance(point1: Tuple[float], point2: Tuple[float]) -> float:
+def manhattan_distance(point1: Tuple[float], point2: Tuple[float]) -> float:
     return sum(abs(point1[coord] - point2[coord]) for coord in range(min(len(point1), len(point2))))
 
 
@@ -81,9 +81,10 @@ def print_distances_table(training_sample: List[SampleItem], test_sample: List[S
         print()
 
 
-def input_sample() -> List[SampleItem]:
+def input_sample(input_class: bool = True) -> List[SampleItem]:
     print(
-        "Вводите элементы (новый в каждой строке), вводя их параметры через пробел и имя класса в конце (также через пробел). "
+        "Вводите элементы (новый в каждой строке), вводя их параметры через пробел"
+        f"{' и имя класса в конце (также через пробел). ' if input_class else ''}"
         "Закончите ввод двумя пустыми строками."
     )
     result = []
@@ -104,7 +105,7 @@ def input_sample() -> List[SampleItem]:
             continue
         item_coordinates = []
         line_parsed = True
-        for i in range(len(numbers_str) - 1):
+        for i in range(len(numbers_str) - int(input_class)):
             try:
                 item_coordinates.append(float(numbers_str[i]))
             except ValueError:
@@ -113,7 +114,7 @@ def input_sample() -> List[SampleItem]:
         if not line_parsed:
             print("Введено неверное значение, оно не будет учтено")
             continue
-        result.append(SampleItem(tuple(item_coordinates), numbers_str[-1]))
+        result.append(SampleItem(tuple(item_coordinates), numbers_str[-1] if input_class else None))
     return result
 
 
@@ -168,7 +169,7 @@ def print_confusion_matrix(matrix: Dict[str, Dict[str, int]]):
 
 
 def main():
-    distance_choices = {'1': calculate_euclidean_distance, '2': calculate_manhattan_distance, '3': calculate_chebyshev_distance}
+    distance_choices = {'1': euclidean_distance, '2': manhattan_distance, '3': chebyshev_distance}
     print(
         "Выберите способ подсчёта расстояния (только число)\n"
         "[1] - Евклидов способ\n"
@@ -182,7 +183,7 @@ def main():
     try:
         selected_distance_calc = distance_choices[input()]
     except KeyError:
-        selected_distance_calc = calculate_euclidean_distance
+        selected_distance_calc = euclidean_distance
         print("Введено некорректное число, будет использовано Евклидово расстояние")
     except (EOFError, KeyboardInterrupt):
         print(yellow("\nExit"))
