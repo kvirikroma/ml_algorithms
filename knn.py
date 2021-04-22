@@ -1,30 +1,13 @@
-from typing import Tuple, List, Dict, Optional
+from typing import Tuple, List, Dict, Optional, TextIO
+from sys import stdin
+
+from colors import green, red, yellow, blue
 
 
 class SampleItem:
     def __init__(self, values: Tuple, class_name: Optional[str]):
         self.values = values
         self.class_name = class_name
-
-
-def green(inp: str) -> str:
-    """Returns string in green color to print"""
-    return "\033[92m" + inp + "\033[0m"
-
-
-def red(inp: str) -> str:
-    """Returns string in red color to print"""
-    return "\033[91m" + inp + "\033[0m"
-
-
-def yellow(inp: str) -> str:
-    """Returns string in yellow color to print"""
-    return "\033[93m" + inp + "\033[0m"
-
-
-def blue(inp: str) -> str:
-    """Returns string in blue color to print"""
-    return "\033[94m" + inp + "\033[0m"
 
 
 def euclidean_distance(point1: Tuple[float], point2: Tuple[float]) -> float:
@@ -81,16 +64,17 @@ def print_distances_table(training_sample: List[SampleItem], test_sample: List[S
         print()
 
 
-def input_sample(input_class: bool = True) -> List[SampleItem]:
-    print(
-        "Вводите элементы (новый в каждой строке), вводя их параметры через пробел"
-        f"{' и имя класса в конце (также через пробел). ' if input_class else ''}"
-        "Закончите ввод двумя пустыми строками."
-    )
+def input_sample(input_class: bool = True, file: TextIO = stdin) -> List[SampleItem]:
+    if file == stdin:
+        print(
+            "Вводите элементы (новый в каждой строке), вводя их параметры через пробел"
+            f"{' и имя класса в конце (также через пробел).' if input_class else ''} "
+            "Закончите ввод двумя пустыми строками."
+        )
     result = []
     empty_line_entered = False
     while True:
-        new_line = input().replace('\r', '').replace('\n', '')
+        new_line = file.readline().replace('\r', '').replace('\n', '')
         if new_line:
             empty_line_entered = False
         else:
@@ -101,7 +85,8 @@ def input_sample(input_class: bool = True) -> List[SampleItem]:
                 continue
         numbers_str = [part.replace(',', '.') for part in new_line.split() if part]
         if len(numbers_str) < 2:
-            print("Введено неверное значение, оно не будет учтено")
+            if file == stdin:
+                print("Введено неверное значение, оно не будет учтено")
             continue
         item_coordinates = []
         line_parsed = True
@@ -112,7 +97,8 @@ def input_sample(input_class: bool = True) -> List[SampleItem]:
                 line_parsed = False
                 break
         if not line_parsed:
-            print("Введено неверное значение, оно не будет учтено")
+            if file == stdin:
+                print("Введено неверное значение, оно не будет учтено")
             continue
         result.append(SampleItem(tuple(item_coordinates), numbers_str[-1] if input_class else None))
     return result
