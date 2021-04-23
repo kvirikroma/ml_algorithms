@@ -81,14 +81,10 @@ def find_centers_smart(
     centers = [random.choice(filtered_dots), ]
     while len(centers) < centers_count:
         clusters = find_clusters_for_objects(centers, filtered_dots)
-        dots_to_distances = {}
-        max_distance = inf
-        min_distance = -inf
+        dots_to_distances: Dict[Tuple[float], float] = {}
         for center in clusters:
             for point in clusters[center]:
                 if point not in centers:
-                    max_distance = max(clusters[center][point], max_distance)
-                    min_distance = min(clusters[center][point], min_distance)
                     distance = clusters[center][point]
                     dots_to_distances[point] = distance
         all_keys = list(dots_to_distances.keys())
