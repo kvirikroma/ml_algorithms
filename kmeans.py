@@ -11,6 +11,7 @@ import colors
 
 MAX_FLOAT_LENGTH = 5
 DEFAULT_EPSILON = 1 / (10 ** MAX_FLOAT_LENGTH)
+RETURN_NON_NORMALIZED = True
 
 
 def get_mean_for_objects(dots: List[Tuple[float]]) -> Tuple[float]:
@@ -45,16 +46,18 @@ def calculate_max_delta(dot_pairs: Dict[Tuple[float], Tuple[float]]) -> float:
     return max(euclidean_distance(dot_pairs[i], i) for i in dot_pairs)
 
 
-def normalize_parameters(dots: List[Tuple[float]]) -> Tuple[List[Tuple[float]], float, float]:
-    # TODO rewrite (works incorrectly)
-    min_coordinate: float = inf
-    max_coordinate: float = -inf
-    for dot in dots:
-        for coordinate in dot:
-            min_coordinate = min(min_coordinate, coordinate)
-            max_coordinate = max(max_coordinate, coordinate)
-    diff = max_coordinate - min_coordinate
-    return [tuple((coordinate - min_coordinate) / diff for coordinate in dot) for dot in dots], min_coordinate, max_coordinate
+def normalize_parameters(dots: List[Tuple[float]]) -> Tuple[List[Tuple[float]], List[Tuple[float, float]]]:
+    min_dot_len = min(len(dot) for dot in dots)
+    minimums_and_maximums = [(inf, -inf, ) for _ in range(min_dot_len)]
+    for coordinate in range(min_dot_len):
+        for i in range(len(dots)):
+            minimums_and_maximums[coordinate] = (
+                min(minimums_and_maximums[coordinate][0], dots[i][coordinate]),
+                max(minimums_and_maximums[coordinate][1], dots[i][coordinate]),
+            )
+    diffs = [min_and_max[1] - min_and_max[0] for min_and_max in minimums_and_maximums]
+    result = [tuple((float(dot[i]) - minimums_and_maximums[i][0]) / diffs[i] for i in range(min_dot_len)) for dot in dots]
+    return result, minimums_and_maximums
 
 
 def find_centers_smart(
@@ -79,6 +82,7 @@ def find_centers_smart(
     while len(centers) < centers_count:
         clusters = find_clusters_for_objects(centers, filtered_dots)
         distances_to_use: Dict[float, List[Tuple[float]]] = {}
+        dots_to_distances = {}
         max_distance = inf
         min_distance = -inf
         for center in clusters:
@@ -91,10 +95,9 @@ def find_centers_smart(
                         distances_to_use[distance].append(point)
                     else:
                         distances_to_use[distance] = [point, ]
-        random_point = random.uniform(min_distance ** 2, max_distance ** 2)
-        centers.append(random.choice(distances_to_use[min(
-            distances_to_use.keys(), key=lambda dist: abs((dist ** 2) - random_point)
-        )]))
+                    dots_to_distances[point] = distance
+        all_keys = list(dots_to_distances.keys())  # чтобы упорядочить
+        centers.append(random.choices(all_keys, weights=[dots_to_distances[dot] for dot in all_keys], k=1)[0])
     return centers
 
 
@@ -136,13 +139,13 @@ def main() -> Dict[Tuple[float], Dict[Tuple[float], float]]:
         if input_file:
             input_file.close()
 
-    all_dots = [i.values for i in sample]
+    all_dots: List[Tuple[float]] = [i.values for i in sample]
     for dot in all_dots:
         plot_single_object(plt, 'b', dot)
     plt.show()  # without colors
     plt.clf()
-    all_dots, min_parameter, max_parameter = normalize_parameters(all_dots)
-    diff = max_parameter - min_parameter
+    normalized_dots, minimums_and_maximums = normalize_parameters(all_dots)
+    diffs = [min_and_max[1] - min_and_max[0] for min_and_max in minimums_and_maximums]
 
     print(
         "Выберите способ начального выбора центров (только число)\n"
@@ -166,16 +169,17 @@ def main() -> Dict[Tuple[float], Dict[Tuple[float], float]]:
         except ValueError:
             print(colors.red("Нужно ввести натуральное число!"))
 
-    initial_centers = selection_method(all_dots, k)
-    clusters = recalculate_centers(initial_centers, all_dots)
-    clusters = {tuple(
-        round((param * diff) + min_parameter, MAX_FLOAT_LENGTH) for param in cluster
-    ): clusters[cluster] for cluster in clusters}
-    for cluster in clusters:
-        clusters[cluster] = {tuple(
-            round((param * diff) + min_parameter, MAX_FLOAT_LENGTH) for param in dot
-        ): clusters[cluster][dot] * diff for dot in clusters[cluster]}
-    all_dots = [tuple(round((param * diff) + min_parameter, MAX_FLOAT_LENGTH) for param in dot) for dot in all_dots]
+    initial_centers = selection_method(normalized_dots, k)
+    clusters = recalculate_centers(initial_centers, normalized_dots)
+
+    if RETURN_NON_NORMALIZED:
+        clusters = {tuple(round(
+            (cluster[i] * diffs[i]) + minimums_and_maximums[i][0], MAX_FLOAT_LENGTH
+        ) for i in range(len(cluster))): clusters[cluster] for cluster in clusters}
+        for cluster in clusters:
+            clusters[cluster] = {tuple(
+                round((dot[i] * diffs[i]) + minimums_and_maximums[i][0], MAX_FLOAT_LENGTH) for i in range(len(dot))
+            ): clusters[cluster][dot] for dot in clusters[cluster]}
 
     centers = list(clusters.keys())
     plot_colors = ['b', 'g', 'r', 'y', 'm', 'c', 'k']
@@ -187,9 +191,11 @@ def main() -> Dict[Tuple[float], Dict[Tuple[float], float]]:
     plt.show()  # colored
     plt.clf()
 
-    max_number_length = max(max(len(coordinate.__repr__()) for coordinate in dot) for dot in all_dots)
+    max_number_length = max(max(len(coordinate.__repr__()) for coordinate in dot) for dot in (
+        all_dots if RETURN_NON_NORMALIZED else normalized_dots
+    ))
     print()
-    for dot in all_dots:
+    for dot in (all_dots if RETURN_NON_NORMALIZED else normalized_dots):
         for center in range(len(centers)):
             if min(euclidean_distance(i, dot) for i in clusters[centers[center]]) < DEFAULT_EPSILON:
                 for coordinate in dot:
