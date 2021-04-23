@@ -88,7 +88,7 @@ def find_centers_smart(
                     distance = clusters[center][point]
                     dots_to_distances[point] = distance
         all_keys = list(dots_to_distances.keys())
-        centers.append(random.choices(all_keys, weights=[dots_to_distances[dot] for dot in all_keys], k=1)[0])
+        centers.append(random.choices(all_keys, weights=[dots_to_distances[dot] ** 2 for dot in all_keys], k=1)[0])
     return centers
 
 
@@ -133,8 +133,7 @@ def main() -> Dict[Tuple[float], Dict[Tuple[float], float]]:
     all_dots: List[Tuple[float]] = [i.values for i in sample]
     for dot in all_dots:
         plot_single_object(plt, 'b', dot)
-    plt.show()  # without colors
-    plt.clf()
+    plt.show(block=False)  # without colors
     normalized_dots, minimums_and_maximums = normalize_parameters(all_dots)
     diffs = [min_and_max[1] - min_and_max[0] for min_and_max in minimums_and_maximums]
 
@@ -176,12 +175,6 @@ def main() -> Dict[Tuple[float], Dict[Tuple[float], float]]:
     plot_colors = ['b', 'g', 'r', 'y', 'm', 'c', 'k']
     printing_colors = [colors.blue, colors.green, colors.red, colors.yellow, colors.magenta, colors.cyan, colors.grey]
 
-    for i in range(len(centers)):
-        for line in clusters[centers[i]]:
-            plot_single_object(plt, plot_colors[i % len(plot_colors)], line)
-    plt.show()  # colored
-    plt.clf()
-
     max_number_length = max(max(len(coordinate.__repr__()) for coordinate in dot) for dot in (
         all_dots if RETURN_NON_NORMALIZED else normalized_dots
     ))
@@ -190,11 +183,18 @@ def main() -> Dict[Tuple[float], Dict[Tuple[float], float]]:
         for center in range(len(centers)):
             if min(euclidean_distance(i, dot) for i in clusters[centers[center]]) < DEFAULT_EPSILON:
                 for coordinate in dot:
-                    print(printing_colors[center](
+                    print(printing_colors[center % len(printing_colors)](
                         f"{coordinate.__repr__()}{' ' * (max_number_length - len(coordinate.__repr__()))}  "
                     ), end='')
-                print(printing_colors[center](f"class: {center}"))
+                print(printing_colors[center % len(printing_colors)](f"class: {center}"))
                 break
+
+    plt.clf()
+    for i in range(len(centers)):
+        for line in clusters[centers[i]]:
+            plot_single_object(plt, plot_colors[i % len(plot_colors)], line)
+    plt.show()  # colored
+    plt.clf()
     return clusters
 
 
