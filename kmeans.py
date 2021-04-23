@@ -81,7 +81,6 @@ def find_centers_smart(
     centers = [random.choice(filtered_dots), ]
     while len(centers) < centers_count:
         clusters = find_clusters_for_objects(centers, filtered_dots)
-        distances_to_use: Dict[float, List[Tuple[float]]] = {}
         dots_to_distances = {}
         max_distance = inf
         min_distance = -inf
@@ -91,12 +90,8 @@ def find_centers_smart(
                     max_distance = max(clusters[center][point], max_distance)
                     min_distance = min(clusters[center][point], min_distance)
                     distance = clusters[center][point]
-                    if distances_to_use.get(distance):
-                        distances_to_use[distance].append(point)
-                    else:
-                        distances_to_use[distance] = [point, ]
                     dots_to_distances[point] = distance
-        all_keys = list(dots_to_distances.keys())  # чтобы упорядочить
+        all_keys = list(dots_to_distances.keys())
         centers.append(random.choices(all_keys, weights=[dots_to_distances[dot] for dot in all_keys], k=1)[0])
     return centers
 
