@@ -1,36 +1,73 @@
 from math import inf
 import random
-from typing import Tuple, Iterable, Dict, List
+from typing import Iterable, Dict, List, TextIO
 from os import path
 
 from matplotlib import pyplot as plt
 
-from knn import input_sample, euclidean_distance
-import colors
 
-
-MAX_FLOAT_LENGTH = 5
+MAX_FLOAT_LENGTH = 6
 DEFAULT_EPSILON = 1 / (10 ** MAX_FLOAT_LENGTH)
-RETURN_NON_NORMALIZED = True
 
 
-def get_mean_for_objects(dots: List[Tuple[float]]) -> Tuple[float]:
-    result: Dict[int, float] = {}
-    for dot in dots:
-        for i in range(len(dot)):
-            result[i] = (result.get(i) or 0.0) + dot[i]
-    return tuple((result[i] / len(dots) for i in sorted(result.keys())))
+class Dot:
+    def __init__(self, coordinates: Iterable[float]):
+        self._coordinates = tuple(coordinates)
+
+    def __len__(self):
+        return len(self._coordinates)
+
+    def __iter__(self):
+        return iter(self._coordinates)
+
+    def __getitem__(self, item) -> float:
+        return self._coordinates[item]
+
+    def __hash__(self):
+        return hash(self._coordinates)
+
+    def __eq__(self, other: 'Dot') -> bool:
+        if len(self) != len(other):
+            return False
+        return self.distance(other) < DEFAULT_EPSILON
+
+    def distance(self, other: 'Dot') -> float:
+        result = 0
+        for coord in range(min(len(self), len(other))):
+            result += (self[coord] - other[coord]) ** 2
+        return result ** 0.5
 
 
-def find_clusters_for_objects(
-        cluster_centers: List[Tuple[float]], dots: Iterable[Tuple[float]]
-) -> Dict[Tuple[float], Dict[Tuple[float], float]]:  # {center: {dot: distance_to_center}}
-    result = {}
+class Cluster:
+    def __init__(self, center: Dot, dots: Dict[Dot, float]):
+        self.center = center
+        self.dots = {**dots}
+
+    @property
+    def mean(self) -> Dot:
+        result: Dict[int, float] = {}
+        for dot in self.dots:
+            for i in range(len(dot)):
+                result[i] = (result.get(i) or 0.0) + dot[i]
+        return Dot(result[i] / len(self.dots) for i in sorted(result))
+
+    def __contains__(self, item: Dot) -> bool:
+        return min(item.distance(dot) for dot in self.dots) < DEFAULT_EPSILON
+
+    def __iter__(self):
+        return iter(self.dots)
+
+    def __getitem__(self, item: Dot) -> float:
+        return self.dots[item]
+
+
+def create_clusters(cluster_centers: List[Dot], dots: Iterable[Dot]) -> List[Cluster]:
+    result: Dict[Dot, Dict[Dot, float]] = {}
     for dot in dots:
         closest_center = None
         distance = inf
         for center in cluster_centers:
-            current_distance = euclidean_distance(dot, center)
+            current_distance = dot.distance(center)
             if current_distance < distance:
                 closest_center = center
                 distance = current_distance
@@ -39,14 +76,10 @@ def find_clusters_for_objects(
         else:
             result[closest_center] = {dot: distance}
     result.update({absent_center: {} for absent_center in cluster_centers if absent_center not in result})
-    return result
+    return [Cluster(i, result[i]) for i in result]
 
 
-def calculate_max_delta(dot_pairs: Dict[Tuple[float], Tuple[float]]) -> float:
-    return max(euclidean_distance(dot_pairs[i], i) for i in dot_pairs)
-
-
-def normalize_parameters(dots: List[Tuple[float]]) -> Tuple[List[Tuple[float]], List[Tuple[float, float]]]:
+def normalize_parameters(dots: List[Dot]) -> List[Dot]:
     min_dot_len = min(len(dot) for dot in dots)
     minimums_and_maximums = [(inf, -inf, ) for _ in range(min_dot_len)]
     for coordinate in range(min_dot_len):
@@ -56,68 +89,75 @@ def normalize_parameters(dots: List[Tuple[float]]) -> Tuple[List[Tuple[float]], 
                 max(minimums_and_maximums[coordinate][1], dots[i][coordinate]),
             )
     diffs = [min_and_max[1] - min_and_max[0] for min_and_max in minimums_and_maximums]
-    result = [tuple((float(dot[i]) - minimums_and_maximums[i][0]) / diffs[i] for i in range(min_dot_len)) for dot in dots]
-    return result, minimums_and_maximums
+    result = [Dot((dot[i] - minimums_and_maximums[i][0]) / diffs[i] for i in range(min_dot_len)) for dot in dots]
+    return result
 
 
-def find_centers_smart(
-        dots: List[Tuple[float]], centers_count: int, epsilon: int = DEFAULT_EPSILON, filter_dots: bool = False
-) -> List[Tuple[float]]:
+def k_means_plusplus(dots: List[Dot], centers_count: int) -> List[Cluster]:
     if centers_count < 2:
         raise ValueError("centers_count must be >= 2")
-    if filter_dots:
-        filtered_dots = []
-        for dot in dots:
-            skip_dot = False
-            for appended_dot in filtered_dots:
-                if euclidean_distance(appended_dot, dot) < epsilon:
-                    skip_dot = True
-                    break
-            if not skip_dot:
-                filtered_dots.append(dot)
-    else:
-        filtered_dots = dots
-
-    centers = [random.choice(filtered_dots), ]
+    centers = [random.choice(dots), ]
     while len(centers) < centers_count:
-        clusters = find_clusters_for_objects(centers, filtered_dots)
-        dots_to_distances: Dict[Tuple[float], float] = {}
-        for center in clusters:
-            for point in clusters[center]:
+        clusters = create_clusters(centers, dots)
+        dots_to_distances: Dict[Dot, float] = {}
+        for cluster in clusters:
+            for point in cluster:
                 if point not in centers:
-                    distance = clusters[center][point]
+                    distance = cluster[point]
                     dots_to_distances[point] = distance
         all_keys = list(dots_to_distances.keys())
         centers.append(random.choices(all_keys, weights=[dots_to_distances[dot] ** 2 for dot in all_keys], k=1)[0])
-    return centers
+    return create_clusters(centers, dots)
 
 
-def recalculate_centers(
-        cluster_centers: List[Tuple[float]], dots: Iterable[Tuple[float]],
-        max_iterations: int = 256, epsilon: float = DEFAULT_EPSILON
-) -> Dict[Tuple[float], Dict[Tuple[float], float]]:  # {center: {dot: distance_to_center}}
-    clusters = find_clusters_for_objects(cluster_centers, dots)
+def make_centers_mean(cluster_centers: List[Dot], dots: Iterable[Dot], max_iterations: int = 256) -> List[Cluster]:
+    clusters = create_clusters(cluster_centers, dots)
     for _ in range(max_iterations):
-        old_centers = list(clusters.keys())
-        new_centers = [get_mean_for_objects(list(clusters[center].keys())) for center in clusters]
-        if max((euclidean_distance(new_centers[i], old_centers[i]) for i in range(len(new_centers)))) < epsilon:
+        old_centers = [cluster.center for cluster in clusters]
+        new_centers = [cluster.mean for cluster in clusters]
+        if max((new_centers[i].distance(old_centers[i]) for i in range(len(new_centers)))) < DEFAULT_EPSILON:
             break
-        clusters = find_clusters_for_objects(new_centers, dots)
+        clusters = create_clusters(new_centers, dots)
     return clusters
 
 
-def plot_single_object(plot, color, item) -> None:
+def display_on_plot(plot, color, item) -> None:
     if len(item) == 2:
         plot.scatter(*item, color=color)
     else:
         plt.plot(item, color=color)
 
 
-def main() -> Dict[Tuple[float], Dict[Tuple[float], float]]:
+def input_sample(file: TextIO) -> List[Dot]:
+    result = []
+    while True:
+        new_line = file.readline()
+        if new_line:
+            new_line = new_line.replace('\r', '').replace('\n', '')
+        else:
+            break
+        numbers_str = [part.replace(',', '.') for part in new_line.split() if part]
+        if len(numbers_str) < 2:
+            continue
+        item_coordinates = []
+        line_parsed = True
+        for i in range(len(numbers_str)):
+            try:
+                item_coordinates.append(float(numbers_str[i]))
+            except ValueError:
+                line_parsed = False
+                break
+        if not line_parsed:
+            continue
+        result.append(Dot(item_coordinates))
+    return result
+
+
+def main():
     centers_selection = {
-        '1': lambda dots, count: random.sample(dots, count),
-        '2': lambda dots, count: dots[:count],
-        '3': find_centers_smart
+        '1': lambda dots, count: create_clusters(random.sample(dots, count), dots),
+        '2': lambda dots, count: create_clusters(dots[:count], dots),
+        '3': k_means_plusplus
     }
     print("Откуда читать данные (имя файла)?")
     while not (path.exists(input_file_name := input()) and not path.isdir(input_file_name)):
@@ -125,17 +165,15 @@ def main() -> Dict[Tuple[float], Dict[Tuple[float], float]]:
     input_file = None
     try:
         input_file = open(input_file_name)
-        sample = input_sample(input_class=False, file=input_file)
+        all_dots = input_sample(file=input_file)
     finally:
         if input_file:
             input_file.close()
 
-    all_dots: List[Tuple[float]] = [i.values for i in sample]
     for dot in all_dots:
-        plot_single_object(plt, 'b', dot)
+        display_on_plot(plt, 'b', dot)
     plt.show(block=False)  # without colors
-    normalized_dots, minimums_and_maximums = normalize_parameters(all_dots)
-    diffs = [min_and_max[1] - min_and_max[0] for min_and_max in minimums_and_maximums]
+    all_dots = normalize_parameters(all_dots)
 
     print(
         "Выберите способ начального выбора центров (только число)\n"
@@ -146,61 +184,46 @@ def main() -> Dict[Tuple[float], Dict[Tuple[float], float]]:
     try:
         selection_method = centers_selection[input()]
     except KeyError:
-        selection_method = find_centers_smart
+        selection_method = k_means_plusplus
         print("Введено некорректное число, будет использовано k-means++")
 
     while True:
         try:
             k = int(input("Введите К (кол-во кластеров): "))
             if k < 2:
-                print(colors.red("Количество должно быть больше чем 2"))
+                print("Количество должно быть больше чем 2")
             else:
                 break
         except ValueError:
-            print(colors.red("Нужно ввести натуральное число!"))
+            print("Нужно ввести натуральное число!")
 
-    initial_centers = selection_method(normalized_dots, k)
-    clusters = recalculate_centers(initial_centers, normalized_dots)
+    initial_clusters = selection_method(all_dots, k)
+    clusters = make_centers_mean([cluster.center for cluster in initial_clusters], all_dots)
 
-    if RETURN_NON_NORMALIZED:
-        clusters = {tuple(round(
-            (cluster[i] * diffs[i]) + minimums_and_maximums[i][0], MAX_FLOAT_LENGTH
-        ) for i in range(len(cluster))): clusters[cluster] for cluster in clusters}
-        for cluster in clusters:
-            clusters[cluster] = {tuple(
-                round((dot[i] * diffs[i]) + minimums_and_maximums[i][0], MAX_FLOAT_LENGTH) for i in range(len(dot))
-            ): clusters[cluster][dot] for dot in clusters[cluster]}
-
-    centers = list(clusters.keys())
+    centers = [cluster.center for cluster in clusters]
     plot_colors = ['b', 'g', 'r', 'y', 'm', 'c', 'k']
-    printing_colors = [colors.blue, colors.green, colors.red, colors.yellow, colors.magenta, colors.cyan, colors.grey]
 
-    max_number_length = max(max(len(coordinate.__repr__()) for coordinate in dot) for dot in (
-        all_dots if RETURN_NON_NORMALIZED else normalized_dots
-    ))
+    max_number_length = max(max(len(coordinate.__repr__()) for coordinate in dot) for dot in all_dots)
     print()
-    for dot in (all_dots if RETURN_NON_NORMALIZED else normalized_dots):
-        for center in range(len(centers)):
-            if min(euclidean_distance(i, dot) for i in clusters[centers[center]]) < DEFAULT_EPSILON:
+    for dot in all_dots:
+        for cluster in range(len(clusters)):
+            if dot in clusters[cluster]:
                 for coordinate in dot:
-                    print(printing_colors[center % len(printing_colors)](
-                        f"{coordinate.__repr__()}{' ' * (max_number_length - len(coordinate.__repr__()))}  "
-                    ), end='')
-                print(printing_colors[center % len(printing_colors)](f"class: {center}"))
+                    print(f"{coordinate.__repr__()}{' ' * (max_number_length - len(coordinate.__repr__()))}  ", end='')
+                print(f"class: {cluster}")
                 break
 
     plt.clf()
     for i in range(len(centers)):
-        for line in clusters[centers[i]]:
-            plot_single_object(plt, plot_colors[i % len(plot_colors)], line)
+        for item in clusters[i]:
+            display_on_plot(plt, plot_colors[i % len(plot_colors)], item)
     plt.show()  # colored
     plt.clf()
-    return clusters
 
 
 if __name__ == "__main__":
     try:
         main()
     except (EOFError, KeyboardInterrupt):
-        print(colors.yellow("\nExit"))
+        print("\nExit")
         exit()
