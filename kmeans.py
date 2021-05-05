@@ -60,6 +60,18 @@ class Cluster:
     def __getitem__(self, item: Dot) -> float:
         return self.dots[item]
 
+    def min_distance(self, other: 'Cluster') -> float:
+        try:
+            return min(self_dot.distance(other_dot) for self_dot in self for other_dot in other)
+        except ValueError:
+            return inf
+
+    def max_self_distance(self) -> float:
+        try:
+            return max(dot.distance(other_dot) for dot in self for other_dot in self if dot != other_dot)
+        except ValueError:
+            return 0.0
+
 
 def create_clusters(cluster_centers: List[Dot], dots: Iterable[Dot]) -> List[Cluster]:
     result: Dict[Dot, Dict[Dot, float]] = {}
@@ -125,7 +137,7 @@ def display_on_plot(plot, color, item) -> None:
     if len(item) == 2:
         plot.scatter(*item, color=color)
     else:
-        plt.plot(item, color=color)
+        plot.plot(item, color=color)
 
 
 def input_sample(file: TextIO) -> List[Dot]:
@@ -151,6 +163,14 @@ def input_sample(file: TextIO) -> List[Dot]:
             continue
         result.append(Dot(item_coordinates))
     return result
+
+
+def dunn_index(clusters: List[Cluster]):
+    max_in_cluster_distance = max(cluster.max_self_distance() for cluster in clusters)
+    min_clusters_distance = min(
+        cluster.min_distance(other_cluster) for cluster in clusters for other_cluster in clusters if cluster != other_cluster
+    )
+    return min_clusters_distance / max_in_cluster_distance
 
 
 def main():
@@ -213,12 +233,30 @@ def main():
                 print(f"class: {cluster}")
                 break
 
+    quality_index = dunn_index(clusters)
+    print(f"Dunn index for this clustering: {quality_index}")
+
     plt.clf()
     for i in range(len(centers)):
         for item in clusters[i]:
             display_on_plot(plt, plot_colors[i % len(plot_colors)], item)
-    plt.show()  # colored
+    plt.figure()
+    plt.show(block=False)  # colored
+
+    clustering_qualities = {}
+    for i in range(2, 17):
+        if i == k:
+            clustering_qualities[i] = quality_index
+        else:
+            tmp_init_clusters = selection_method(all_dots, i)
+            tmp_clusters = make_centers_mean([cluster.center for cluster in tmp_init_clusters], all_dots)
+            clustering_qualities[i] = dunn_index(tmp_clusters)
+    print("Dunn index for other clustering types:")
+    for i in clustering_qualities:
+        print(f"{i}: {clustering_qualities[i]}")
     plt.clf()
+    plt.plot([None, None, *(clustering_qualities[clusters_count] for clusters_count in sorted(clustering_qualities))])
+    plt.show()
 
 
 if __name__ == "__main__":
