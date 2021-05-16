@@ -100,15 +100,24 @@ def main():
     testing_data_y_name = list(testing_data.columns)[-1]
     testing_data_y = testing_data[testing_data_y_name]
     testing_data.drop(testing_data_y_name, inplace=True, axis=1)
-    # testing_data = testing_data[[testing_data.columns[i] for i in range(min(len(testing_data.columns[10:]), 6))]]
-    # training_data = training_data[[training_data.columns[i] for i in range(min(len(training_data.columns[10:]), 6))]]
+    # testing_data = testing_data[[testing_data.columns[i] for i in range(min(len(testing_data.columns[65:]), 5))]]
+    # training_data = training_data[[training_data.columns[i] for i in range(min(len(training_data.columns[65:]), 5))]]
     for column in list(training_data.columns):
         if column not in testing_data.columns:
             training_data.drop(column, inplace=True, axis=1)
     weights = forward_selection(training_data, list(training_data_y), testing_data, list(testing_data_y), adapter)
-    columns = list(weights.keys())
-    plt.bar(columns, [weights[column] for column in columns])
     print(weights)
+    plt.figure(figsize=(25, 8))
+    sorted_columns = [*sorted(weights.keys(), key=lambda x: weights[x], reverse=True)]
+    columns_to_draw = [
+        f'{sorted_columns[i]}_{i}' if
+        sorted_columns[i].count('_') == 0 else
+        f'{sorted_columns[i][0]}{sorted_columns[i].split("_")[1].strip()[:1]}_{i}'
+        for i in range(len(sorted_columns))
+    ]
+    values_to_draw = [*sorted(weights.values(), reverse=True)]
+    plt.xticks(range(len(columns_to_draw)), columns_to_draw)
+    plt.plot(columns_to_draw, values_to_draw)
     plt.show()
 
 
