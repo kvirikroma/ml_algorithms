@@ -9,7 +9,7 @@ from sklearn import preprocessing
 
 
 def adapter(training_data_x: DataFrame, training_data_y: list, test_data_x: DataFrame, test_data_y: list) -> float:
-    classifier = KNeighborsClassifier(n_neighbors=3, n_jobs=cpu_count())
+    classifier = KNeighborsClassifier(n_neighbors=3, n_jobs=max(cpu_count() // 2, 1))
     classifier.fit(training_data_x, training_data_y)
     predicted = classifier.predict(test_data_x)
     total_correct = 0
@@ -59,54 +59,47 @@ def forward_selection(
             break
         maximum_accuracy = max(rating.keys())
         result[rating[maximum_accuracy]] = maximum_accuracy
+        print()
+        print(f"Calculated {len(result)} attributes of {len(training_data_x.columns)}")
+        print(result)
     executor.shutdown()
     return result
 
 
-def prepare_data(data: DataFrame, aliases: Dict[str, str] = None) -> Union[DataFrame, Tuple[DataFrame, Dict[str, str]]]:
-    tmp_data = data.replace(' ?', numpy.nan)
-    tmp_data.dropna("index", inplace=True, how='any')
+def prepare_data(data: DataFrame) -> DataFrame:
+    tmp_data = data.dropna("index", how='any')
     numeric_data = tmp_data.select_dtypes(include=('int16', 'int32', 'int64', 'float16', 'float32', 'float64'))
     non_numeric_data = frozenset(tmp_data.columns) - frozenset(numeric_data)
     non_numeric_data = {column: list(set(tmp_data[column].values)) for column in non_numeric_data}
     tmp_data = get_dummies(tmp_data, columns=non_numeric_data, drop_first=True)
-    # tmp_data.drop(non_numeric_data, inplace=True, axis=1)
     values_scaled = preprocessing.MinMaxScaler().fit_transform(tmp_data.values)
     final_data = DataFrame(values_scaled)
     final_data.columns = [column.strip() for column in tmp_data.columns]
-    columns = final_data.columns
-    if aliases:
-        new_columns = []
-        for column in columns:
-            if column.strip() in aliases:
-                new_columns.append(aliases[column])
-            else:
-                final_data.drop(column, inplace=True, axis=1)
-        final_data.columns = new_columns
-        return final_data
-    else:
-        # final_data.columns = [str(i) for i in range(len(columns))]
-        return final_data, {column: alias for column, alias in zip(columns, final_data.columns)}
+    # final_data.columns = [str(i) for i in range(len(columns))]
+    return tmp_data
 
 
 def main():
     training_data = read_csv(input("Введите расположение файла с данными для обучения: "))
     testing_data = read_csv(input("Введите расположение файла с тестовыми данными: "))
-    training_data, aliases = prepare_data(training_data)
-    testing_data = prepare_data(testing_data, aliases)
+    for data in training_data, testing_data:
+        data.columns = [column.strip() for column in data.columns]
+        data.replace(' ?', numpy.nan, inplace=True)
+        data.dropna("index", inplace=True, how='any')
+    training_length = len(training_data)
+    all_data = training_data.copy(deep=True)
+    all_data = all_data.append(testing_data)
+    all_data = prepare_data(all_data)
+    training_data = all_data.iloc[:training_length, :]
+    testing_data = all_data.iloc[training_length:, :]
     training_data_y_name = list(training_data.columns)[-1]
     training_data_y = training_data[training_data_y_name]
-    training_data.drop(training_data_y_name, inplace=True, axis=1)
+    training_data = training_data.drop(training_data_y_name, axis=1)
     testing_data_y_name = list(testing_data.columns)[-1]
     testing_data_y = testing_data[testing_data_y_name]
-    testing_data.drop(testing_data_y_name, inplace=True, axis=1)
-    # testing_data = testing_data[[testing_data.columns[i] for i in range(min(len(testing_data.columns[65:]), 5))]]
-    # training_data = training_data[[training_data.columns[i] for i in range(min(len(training_data.columns[65:]), 5))]]
-    for column in list(training_data.columns):
-        if column not in testing_data.columns:
-            training_data.drop(column, inplace=True, axis=1)
+    testing_data = testing_data.drop(testing_data_y_name, axis=1)
     weights = forward_selection(training_data, list(training_data_y), testing_data, list(testing_data_y), adapter)
-    print(weights)
+    print(f"\nResult: {weights}")
     plt.figure(figsize=(25, 8))
     sorted_columns = [*sorted(weights.keys(), key=lambda x: weights[x], reverse=True)]
     columns_to_draw = [
