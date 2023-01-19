@@ -5,6 +5,7 @@ from os import path
 
 from matplotlib import pyplot as plt
 
+import colors
 
 MAX_FLOAT_LENGTH = 6
 DEFAULT_EPSILON = 1 / (10 ** MAX_FLOAT_LENGTH)
@@ -168,7 +169,10 @@ def input_sample(file: TextIO) -> List[Dot]:
 def dunn_index(clusters: List[Cluster]):
     max_in_cluster_distance = max(cluster.max_self_distance() for cluster in clusters)
     min_clusters_distance = min(
-        cluster.min_distance(other_cluster) for cluster in clusters for other_cluster in clusters if cluster != other_cluster
+        cluster.min_distance(other_cluster)
+        for cluster in clusters
+        for other_cluster in clusters
+        if cluster != other_cluster
     )
     return min_clusters_distance / max_in_cluster_distance
 
@@ -179,9 +183,11 @@ def main():
         '2': lambda dots, count: create_clusters(dots[:count], dots),
         '3': k_means_plusplus
     }
-    print("Откуда читать данные (имя файла)?")
-    while not (path.exists(input_file_name := input()) and not path.isdir(input_file_name)):
-        print("Введено некорректное значение, повторите ввод!")
+    while not (
+            path.exists(input_file_name := input("Enter the name of file to read the data from: "))
+            and not path.isdir(input_file_name)
+    ):
+        print(colors.red("Invalid input"))
     input_file = None
     try:
         input_file = open(input_file_name)
@@ -196,26 +202,26 @@ def main():
     all_dots = normalize_parameters(all_dots)
 
     print(
-        "Выберите способ начального выбора центров (только число)\n"
-        "  [1] - Случайным образом\n"
-        "  [2] - Первые k записей\n"
+        "Choose the way of initial centers choosing (input only the number)\n"
+        "  [1] - Randomly\n"
+        "  [2] - First k samples\n"
         "  [3] - k-means++"
     )
     try:
         selection_method = centers_selection[input()]
     except KeyError:
         selection_method = k_means_plusplus
-        print("Введено некорректное число, будет использовано k-means++")
+        print("Incorrect input. K-means++ will be used.")
 
     while True:
         try:
-            k = int(input("Введите К (кол-во кластеров): "))
+            k = int(input("Input К (number of clusters): "))
             if k < 2:
-                print("Количество должно быть больше чем 2")
+                print("Number of clusters must be more than 2")
             else:
                 break
         except ValueError:
-            print("Нужно ввести натуральное число!")
+            print("The number must be natural")
 
     initial_clusters = selection_method(all_dots, k)
     clusters = make_centers_mean([cluster.center for cluster in initial_clusters], all_dots)
@@ -263,5 +269,5 @@ if __name__ == "__main__":
     try:
         main()
     except (EOFError, KeyboardInterrupt):
-        print("\nExit")
+        print(colors.yellow("\nExit"))
         exit()

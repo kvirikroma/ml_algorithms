@@ -44,7 +44,9 @@ def knn_predict(training_sample: List[SampleItem], item_values: Tuple[float], di
     return predicted_dict[max(predicted_dict.keys())]
 
 
-def print_distances_table(training_sample: List[SampleItem], test_sample: List[SampleItem], distance_calculator, k: int):
+def print_distances_table(
+        training_sample: List[SampleItem], test_sample: List[SampleItem], distance_calculator, k: int
+):
     print(end='    \t')
     for i in range(len(training_sample)):
         print(end=yellow(f'tr{i}\t'))
@@ -67,9 +69,9 @@ def print_distances_table(training_sample: List[SampleItem], test_sample: List[S
 def input_sample(input_class: bool = True, file: TextIO = stdin) -> List[SampleItem]:
     if file == stdin:
         print(
-            "Вводите элементы (новый в каждой строке), вводя их параметры через пробел"
-            f"{' и имя класса в конце (также через пробел).' if input_class else ''} "
-            "Закончите ввод двумя пустыми строками."
+            "Input the elements (one per line), separating their parameters by spaces."
+            f"{' And then input the class name in the end (also separated by space).' if input_class else ''} "
+            "Finish the input by 2 empty lines."
         )
     result = []
     empty_line_entered = False
@@ -86,7 +88,7 @@ def input_sample(input_class: bool = True, file: TextIO = stdin) -> List[SampleI
         numbers_str = [part.replace(',', '.') for part in new_line.split() if part]
         if len(numbers_str) < 2:
             if file == stdin:
-                print("Введено неверное значение, оно не будет учтено")
+                print("Invalid value is given. It won't be taken into account")
             continue
         item_coordinates = []
         line_parsed = True
@@ -98,7 +100,7 @@ def input_sample(input_class: bool = True, file: TextIO = stdin) -> List[SampleI
                 break
         if not line_parsed:
             if file == stdin:
-                print("Введено неверное значение, оно не будет учтено")
+                print("Invalid value is given. It won't be taken into account")
             continue
         result.append(SampleItem(tuple(item_coordinates), numbers_str[-1] if input_class else None))
     return result
@@ -157,58 +159,59 @@ def print_confusion_matrix(matrix: Dict[str, Dict[str, int]]):
 def main():
     distance_choices = {'1': euclidean_distance, '2': manhattan_distance, '3': chebyshev_distance}
     print(
-        "Выберите способ подсчёта расстояния (только число)\n"
-        "[1] - Евклидов способ\n"
-        "[2] - Манхеттенский способ\n"
-        "[3] - Способ Чебышева"
+        "Choose the distance calculating method (only the number)\n"
+        "[1] - Euclidean method\n"
+        "[2] - Manhattan method\n"
+        "[3] - Chebyshev's method"
     )
-
-    # this disables some stupid PyCharm warnings
-    k = training_sample = test_sample = predicted_classes = selected_distance_calc = None
 
     try:
         selected_distance_calc = distance_choices[input()]
     except KeyError:
         selected_distance_calc = euclidean_distance
-        print("Введено некорректное число, будет использовано Евклидово расстояние")
+        print("Incorrect number is given, the euclidean distance will be used")
     except (EOFError, KeyboardInterrupt):
         print(yellow("\nExit"))
         exit()
 
     try:
-        k = int(input("Введите К (гиперпараметр класификатора): "))
-        print("Введите обучающую выборку:")
+        k = int(input("Input the К (the classifier's hyperparameter): "))
+        print("Input the training sample:")
         training_sample = input_sample()
-        print("Введите тестовую выборку:")
+        print("Input the test sample:")
         test_sample = input_sample()
     except (EOFError, KeyboardInterrupt):
         print(yellow("\nExit"))
         exit()
 
-    print("\nТаблица расстояний для объектов:")
+    print("\nA distance table for the objects:")
     print_distances_table(training_sample, test_sample, selected_distance_calc, k)
 
     try:
-        predicted_classes = [knn_predict(training_sample, item.values, selected_distance_calc, k) for item in test_sample]
+        predicted_classes = [knn_predict(
+            training_sample, item.values, selected_distance_calc, k
+        ) for item in test_sample]
     except ValueError as err:
         print('\n' + red(err.args if isinstance(err.args, str) else err.args[0]))
         print(yellow("Exit"))
         exit()
 
-    print("\nТаблица предсказаний класификатора для тестовой выборки:")
+    print("\nPrediction table:")
     print_sample(test_sample, predicted_classes)
     confusion_matrix = calculate_confusion_matrix([item.class_name for item in test_sample], predicted_classes)
-    print("\nМатрица ошибок:")
+    print("\nError matrix:")
     print_confusion_matrix(confusion_matrix)
 
-    correct_predicts = sum((1 for i in range(len(predicted_classes)) if predicted_classes[i] == test_sample[i].class_name))
+    correct_predicts = sum((
+        1 for i in range(len(predicted_classes)) if predicted_classes[i] == test_sample[i].class_name
+    ))
     correctness_percent = correct_predicts / len(predicted_classes)
     correctness_color = red
     if correctness_percent > 0.5:
         correctness_color = yellow
     if correctness_percent > 0.75:
         correctness_color = green
-    print(f"\nТочность класификатора: {correctness_color(str(correctness_percent))}")
+    print(f"\nThe classifier's accuracy: {correctness_color(str(correctness_percent))}")
 
 
 if __name__ == "__main__":
